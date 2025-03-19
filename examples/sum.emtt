@@ -1,0 +1,13 @@
+{
+    Either[t: @type, s: @type]: @theory = {
+      e: @type;
+      inj1 : [x: t] -> e;
+      inj2 : [x: s] -> e;
+    };
+
+    Match[t: @type, s: @type, u: @type, f: [x: t] -> u, g: [x: s] -> u, E: Either[t, s]]: @theory = {
+      h: [x: E.e] -> u;
+      inj1: [x: t] -> h[E.inj1[x]] == f[x];
+      inj2: [x: s] -> h[E.inj2[x]] == g[x];
+    };
+}

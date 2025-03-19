@@ -1,0 +1,8 @@
+{
+  R[W: @type, A: [x: W, y: W] -> @type, B: [x: W, y: W] -> @type]: [x: W] -> @type = [x] ↦ {
+    y: W;
+    a1: A[x, y];
+    a2: A[y, x];
+    b: B[x, x];
+  };
+}

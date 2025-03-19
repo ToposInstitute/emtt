@@ -1,0 +1,36 @@
+{
+  Cat[] : @theory = {
+    ob: @type;
+    hom: [x: ob, y: ob] -> @type;
+    id: [x: ob] -> hom[x, x];
+    compose: [x: ob, y: ob, z: ob, f: hom[x,y], g: hom[y,z]] -> hom[x,z];
+    unitl: [x: ob, y: ob, f: hom[x,y]] -> compose[x,x,y,id[x],f] == f;
+    unitr: [x: ob, y: ob, f: hom[x,y]] -> compose[x,y,y,f,id[y]] == f;
+    assoc: [x: ob, y: ob, z: ob, w: ob, f: hom[x,y], g: hom[y,z], h: hom[z,w]] ->
+      compose[x, z, w, compose[x,y,z,f,g], h] == compose[x,y,w,f,compose[y,z,w,g,h]];
+  };
+
+  Functor[C: Cat[], D: Cat[]]: @theory = {
+    ob: [x: C.ob] -> D.ob;
+    hom: [x: C.ob, y: C.ob] -> [f: C.hom[x,y]] -> D.hom[ob[x], ob[y]];
+  };
+
+  Slice[C: Cat[]]: [over: C.ob] -> Cat[] = [over] ↦ {
+    ob = {
+      top: C.ob;
+      map: C.hom[top, over];
+    };
+    hom = [x, y] ↦ {
+      top: C.hom[x.top, y.top];
+      eq: C.compose[x.top, y.top, over, top, y.map] == x.map;
+    };
+    id = [x] ↦ { top = C.id[x.top]; eq = { C.unitl[x.top, over, x.map]; @refl }; };
+    compose = [x,y,z,f,g] ↦ {
+      top = C.compose[x.top,y.top,z.top,f.top,g.top];
+      eq = { C.assoc[x.top,y.top,z.top,over,f.top,g.top,z.map]; @refl };
+    };
+    unitl = [x, y, f] ↦ { C.unitl[x.top, y.top, f.top]; @refl };
+    unitr = [x, y, f] ↦ { C.unitr[x.top, y.top, f.top]; @refl };
+    assoc = [x, y, z, w, f, g, h] ↦ { C.assoc[x.top, y.top, z.top, w.top, f.top, g.top, h.top]; @refl };
+  };
+}

@@ -1,0 +1,5 @@
+{
+  SubstCounter[t: @type, alleq: [x: t, y: t] -> x == y] :
+    [x: t, y: t] -> x == y =
+    [x,y] ↦ { eq = alleq[x, y]; @refl };
+}

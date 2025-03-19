@@ -1,0 +1,13 @@
+[package]
+name = "emtt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bumpalo = { version = "3.17.0", features = ["collections"] }
+bwd = "0.1.0"
+clap = { version = "4.5.28", features = ["derive"] }
+egg = "0.10.0"
+fexplib = "0.1.1"
+tattle = "0.1.0"
+ustr = "1.1.0"

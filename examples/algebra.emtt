@@ -1,0 +1,37 @@
+{
+  MonoidOn[t: @type]: @theory = {
+    op: [x: t, y: t] -> t;
+    zero: t;
+    assoc: [x: t, y: t, z: t] -> op[x,op[y,z]] == op[op[x,y],z];
+    unit: [x:t] -> op[x, zero] == x;
+  };
+
+  Monoid[]: @theory = {
+    t: @type;
+    m: MonoidOn[t];
+  };
+
+  CGroupOn[t: @type]: @theory = {
+    m: MonoidOn[t];
+    inv: [x: t] -> t;
+    isinv: [x: t] -> m.op[x, inv[x]] == m.zero;
+    comm: [x: t, y: t] -> m.op[x, y] == m.op[y, x];
+  };
+
+  RingOn[t: @type]: @theory = {
+    plus: CGroupOn[t];
+    mul: MonoidOn[t];
+
+    dist: [x: t, y: t, z: t] -> mul.op[x, plus.m.op[y, z]] == plus.m.op[mul.op[x, y], mul.op[x, z]];
+  };
+
+  Lemmas[t: @type, R: RingOn[t]]: @theory = {
+    negunique : [x: t, y: t, eq: R.plus.m.op[x, y] == R.plus.m.zero] -> y == R.plus.inv[x];
+
+    mulzero: [x: t] -> R.mul.op[x, R.plus.m.zero] == R.plus.m.zero;
+
+    l1: [x: t] -> R.plus.m.op[R.plus.inv[R.mul.zero], x] == R.plus.m.zero;
+
+    mulminusoneisneg: [x: t] -> R.mul.op[R.plus.inv[R.mul.zero], x] == R.plus.inv[x];
+  };
+}

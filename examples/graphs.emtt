@@ -1,0 +1,28 @@
+{
+  Gr[] : @theory = {
+    V: @type;
+    E: [v1: V, v2: V] -> @type;
+  };
+
+  Cat[] : @theory = {
+    Ob: @type;
+    Hom: @type;
+    dom: [f: Hom] -> Ob;
+    codom: [f: Hom] -> Ob;
+    compose: [f: Hom, g: Hom, codom[f] == dom[g]] -> Hom;
+  };
+
+  TwoPath[G: Gr[]] : [x: G.V, z: G.V] -> @type = [x, z] ↦ {
+    y: G.V;
+    e1: G.E[x,y];
+    e2: G.E[y,z];
+  };
+
+  g[G: Gr[]] : @type = {
+    x: G.V;
+    z: G.V;
+    p1: TwoPath[G][x,z];
+    p2: TwoPath[G][z,x];
+    p1.y == p2.y;
+  };
+};
