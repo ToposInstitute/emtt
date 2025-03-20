@@ -2,12 +2,69 @@ use super::names::*;
 use std::rc::Rc;
 use ustr::Ustr;
 
+#[derive(Debug)]
+pub enum Telelement {
+    Decl(Stx),
+    Def(Stx, Stx),
+}
+
+impl Telelement {
+    pub fn thstx(&self) -> &TheoryStx {
+        match self {
+            Telelement::Decl(thstx) => thstx,
+            Telelement::Def(_, thstx) => thstx,
+        }
+    }
+}
+
+// A telescope consists of a sequence of declarations and definitions.
 #[derive(Clone, Debug)]
-pub struct Tele(Rc<Vec<(Name, Stx)>>);
+pub struct Tele(Rc<Vec<(Name, Telelement)>>);
 
 impl Tele {
-    pub fn from_vec(v: Vec<(Name, Stx)>) -> Self {
+    pub fn from_vec(v: Vec<(Name, Telelement)>) -> Self {
         Tele(Rc::new(v))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(Name, Telelement)> {
+        self.0.iter()
+    }
+
+    pub fn num_decls(&self) -> usize {
+        self.0
+            .iter()
+            .filter(|(_, te)| match te {
+                Telelement::Decl(_) => true,
+                _ => false,
+            })
+            .count()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn find_field(&self, name: Ustr) -> Option<Field> {
+        let name = Name(Some(name));
+        self.0
+            .iter()
+            .enumerate()
+            .find(|(_, (n, _))| *n == name)
+            .map(|(i, _)| Field::new(name, i))
+    }
+
+    pub fn get(&self, field: Field) -> &(Name, Telelement) {
+        &self.0[field.lvl()]
+    }
+}
+
+// A telecons for a telescope just assigns values to the declarations, but can use the definitions
+#[derive(Clone, Debug)]
+pub struct TeleCons(Rc<Vec<(Name, Stx)>>);
+
+impl TeleCons {
+    pub fn from_vec(v: Vec<(Name, Stx)>) -> Self {
+        Self(Rc::new(v))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &(Name, Stx)> {
@@ -32,7 +89,7 @@ impl Tele {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Stx {
     Var(Idx),
 
@@ -49,11 +106,11 @@ pub enum Stx {
     Lam(Rc<Lam>),
 
     Record(Tele),
-    EltCons(Tele),
-    ModelCons(Tele),
+    EltCons(TeleCons),
+    ModelCons(TeleCons),
     Proj(Rc<ModelStx>, Field),
 
-    Block(Tele, Rc<ModelStx>),
+    Block(TeleCons, Rc<ModelStx>),
 }
 
 pub type EltStx = Stx;

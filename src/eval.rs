@@ -125,18 +125,23 @@ impl<'a> Evaluator<'a> {
                 let mut env = env.clone();
                 let mut fields = Vec::new();
                 self.cron[i].data.fieldtps = Some(Vec::new());
-                for (lvl, (name, tpstx)) in tele.iter().enumerate() {
-                    let tp = Rc::new(self.eval_type(&env, tpstx));
-                    self.cron[i]
-                        .data
-                        .fieldtps
-                        .as_mut()
-                        .unwrap()
-                        .push(tp.clone());
-                    let j = self
-                        .cron
-                        .add(element::Neutral::Proj([i], Field::new(*name, lvl)));
-                    let pe = self.eta_expand_elt(j, &tp);
+                for (lvl, (name, telelement)) in tele.iter().enumerate() {
+                    let pe = match telelement {
+                        stx::Telelement::Decl(tpstx) => {
+                            let tp = Rc::new(self.eval_type(&env, tpstx));
+                            self.cron[i]
+                                .data
+                                .fieldtps
+                                .as_mut()
+                                .unwrap()
+                                .push(tp.clone());
+                            let j = self
+                                .cron
+                                .add(element::Neutral::Proj([i], Field::new(*name, lvl)));
+                            self.eta_expand_elt(j, &tp)
+                        }
+                        stx::Telelement::Def(tmstx, _) => self.eval_elt(&env, tmstx),
+                    };
                     env = env.push(Model::Elt(pe.clone()));
                     fields.push(pe);
                 }
@@ -155,12 +160,17 @@ impl<'a> Evaluator<'a> {
                 let theory = self.toplevel.theory(*tn);
                 let mut env: Env = args.iter().cloned().into();
                 let mut fields = Vec::new();
-                for (i, (name, thstx)) in theory.body.iter().enumerate() {
-                    let th = self.eval_theory(&env, thstx);
-                    let m = self.eta_expand_model(
-                        Rc::new(Neutral::Proj(m.clone(), Field::new(*name, i))),
-                        &th,
-                    );
+                for (i, (name, telelement)) in theory.body.iter().enumerate() {
+                    let m = match telelement {
+                        stx::Telelement::Decl(thstx) => {
+                            let th = self.eval_theory(&env, thstx);
+                            self.eta_expand_model(
+                                Rc::new(Neutral::Proj(m.clone(), Field::new(*name, i))),
+                                &th,
+                            )
+                        }
+                        stx::Telelement::Def(modelstx, _) => self.eval_model(&env, modelstx),
+                    };
                     env = env.push(m.clone());
                     fields.push(m);
                 }

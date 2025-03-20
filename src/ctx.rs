@@ -46,6 +46,11 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    pub fn dump(&mut self, outfile: &str) {
+        self.evaluator_mut().cron.rebuild();
+        self.evaluator_mut().cron.dot().to_svg(outfile).unwrap();
+    }
+
     pub fn checkpoint(&self) -> Checkpoint<'a> {
         Checkpoint {
             env: self.env.clone(),
@@ -128,8 +133,36 @@ impl<'a> Ctx<'a> {
     pub fn convertable_theories(&mut self, th1: &Theory, th2: &Theory) -> bool {
         match (th1, th2) {
             (Theory::Tp, Theory::Tp) => true,
-            (Theory::Pi(_env1, _pi1), Theory::Pi(_env2, _pi2)) => {
-                todo!("conversion checking for pi types")
+            (Theory::Pi(env1, pi1), Theory::Pi(env2, pi2)) => {
+                let checkpoint = self.checkpoint();
+                let mut env1 = env1.clone();
+                let mut env2 = env2.clone();
+                let mut convertable = true;
+                for ((name, te1), (_, te2)) in pi1.args.iter().zip(pi2.args.iter()) {
+                    match (te1, te2) {
+                        (stx::Telelement::Decl(tpstx1), stx::Telelement::Decl(tpstx2)) => {
+                            let tp1 = self.evaluator_mut().eval_type(&env1, tpstx1);
+                            let tp2 = self.evaluator_mut().eval_type(&env2, tpstx2);
+                            if !self.convertable_types(&tp1, &tp2) {
+                                convertable = false;
+                                break;
+                            }
+                            let e = self.intro_elt(*name, &tp1);
+                            env1 = env1.push(Model::Elt(e.clone()));
+                            env2 = env2.push(Model::Elt(e));
+                        }
+                        (stx::Telelement::Def(_, _), stx::Telelement::Def(_, _)) => todo!(),
+                        _ => {
+                            convertable = false;
+                            break;
+                        }
+                    }
+                }
+                let m1 = self.evaluator_mut().eval_model(&env1, &pi1.ret);
+                let m2 = self.evaluator_mut().eval_model(&env2, &pi2.ret);
+                convertable &= self.convertable_models(&m1, &m2);
+                self.return_to(checkpoint);
+                convertable
             }
             (Theory::TopApp(tn1, args1), Theory::TopApp(tn2, args2)) => {
                 tn1 == tn2
@@ -153,16 +186,30 @@ impl<'a> Ctx<'a> {
                 let c = self.checkpoint();
                 let mut env1 = env1.clone();
                 let mut env2 = env2.clone();
-                for ((name, tpstx1), (_, tpstx2)) in tele1.iter().zip(tele2.iter()) {
-                    let tp1 = self.evaluator_mut().eval_type(&env1, tpstx1);
-                    let tp2 = self.evaluator_mut().eval_type(&env1, tpstx2);
-                    if !self.convertable_types(&tp1, &tp2) {
-                        self.return_to(c);
-                        return false;
+                for ((name, telelt1), (_, telelt2)) in tele1.iter().zip(tele2.iter()) {
+                    match (telelt1, telelt2) {
+                        (stx::Telelement::Decl(tpstx1), stx::Telelement::Decl(tpstx2)) => {
+                            let tp1 = self.evaluator_mut().eval_type(&env1, tpstx1);
+                            let tp2 = self.evaluator_mut().eval_type(&env2, tpstx2);
+                            if !self.convertable_types(&tp1, &tp2) {
+                                self.return_to(c);
+                                return false;
+                            }
+                            let e = self.intro_elt(*name, &tp1);
+                            env1 = env1.push(Model::Elt(e.clone()));
+                            env2 = env2.push(Model::Elt(e.clone()));
+                        }
+                        (stx::Telelement::Def(tmstx1, _), stx::Telelement::Def(tmstx2, _)) => {
+                            let e1 = self.evaluator_mut().eval_elt(&env1, tmstx1);
+                            let e2 = self.evaluator_mut().eval_elt(&env2, tmstx2);
+                            if !self.convertable_elts(&e1, &e2) {
+                                return false;
+                            }
+                            env1 = env1.push(Model::Elt(e1.clone()));
+                            env2 = env2.push(Model::Elt(e2.clone()));
+                        }
+                        _ => return false,
                     }
-                    let e = self.intro_elt(*name, &tp1);
-                    env1 = env1.push(Model::Elt(e.clone()));
-                    env2 = env2.push(Model::Elt(e.clone()));
                 }
                 true
             }
@@ -200,7 +247,8 @@ impl<'a> Ctx<'a> {
         }
     }
 
-    pub fn convertable_elts(&self, e1: &Elt, e2: &Elt) -> bool {
+    pub fn convertable_elts(&mut self, e1: &Elt, e2: &Elt) -> bool {
+        self.evaluator_mut().cron.rebuild();
         match (e1, e2) {
             (Elt::Erased, Elt::Erased) => true,
             (Elt::Id(i1), Elt::Id(i2)) => {

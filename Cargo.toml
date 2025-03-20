@@ -8,7 +8,7 @@ bumpalo = { version = "3.17.0", features = ["collections"] }
 bwd = "0.1.0"
 clap = { version = "4.5.28", features = ["derive"] }
 egg = "0.10.0"
-fexplib = "0.1.1"
+fexplib = { path = "../fexplib" }
 pretty = "0.12.4"
 pretty-util = "0.1.0"
 tattle = "0.1.0"

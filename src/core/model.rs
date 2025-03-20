@@ -2,6 +2,7 @@ use egg::Id;
 
 use super::*;
 use crate::{env::Env, eval::Evaluator};
+use std::fmt;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -16,6 +17,17 @@ pub enum FlattenedNeutral {
     Var(Lvl),
     Proj(Rc<FlattenedNeutral>, Field),
     App(Rc<FlattenedNeutral>, Vec<FlattenedElt>),
+}
+
+impl fmt::Display for FlattenedNeutral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use FlattenedNeutral::*;
+        match self {
+            Var(lvl) => write!(f, "{}", lvl.name()),
+            Proj(_, field) => write!(f, ".{}", field.name()),
+            App(head, _) => head.fmt(f),
+        }
+    }
 }
 
 impl Neutral {

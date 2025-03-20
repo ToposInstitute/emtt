@@ -18,5 +18,8 @@
     p1.y == p2.y;
   };
 
-  %dump "joined.svg" [G: Gr, g: Joined[G]];
+  Dump[G: Gr, g: Joined[G]]: {} = {
+    %dump "joined.svg";
+    {}
+  };
 };

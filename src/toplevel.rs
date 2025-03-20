@@ -96,24 +96,6 @@ impl TopElaborator {
         }
     }
 
-    pub fn elab(&mut self, e: &FExp) -> Option<()> {
-        match e.ast0() {
-            App1(L(_, App1(L(_, Special("dump")), L(_, Str(file)))), L(_, Tuple(args))) => {
-                self.dump(file, args)
-            }
-            _ => self.elab_sequent(e),
-        }
-    }
-
-    pub fn dump(&mut self, file: &str, args: &[&FExp]) -> Option<()> {
-        let evaluator = Evaluator::new(&self.toplevel, EGraph::new(TypeAnalysis::new()));
-        let mut ctx = Ctx::new(Env::empty(), Rc::new(evaluator), &mut self.symtable);
-        let elab = Elaborator::new(self.reporter.clone());
-        elab.syn_th_tele(&mut ctx, args);
-        ctx.evaluator.cron.dot().to_svg(file).unwrap();
-        Some(())
-    }
-
     pub fn elab_sequent(&mut self, e: &FExp) -> Option<()> {
         let (name, sequent) = {
             let evaluator = Evaluator::new(&self.toplevel, EGraph::new(TypeAnalysis::new()));
@@ -130,6 +112,7 @@ impl TopElaborator {
 
 const PRECTABLE: &[(&str, Prec)] = &[
     ("=", Prec::nonassoc(10)),
+    (":=", Prec::nonassoc(10)),
     (":", Prec::nonassoc(20)),
     ("==", Prec::nonassoc(30)),
     ("->", Prec::nonassoc(30)),
@@ -137,7 +120,7 @@ const PRECTABLE: &[(&str, Prec)] = &[
     ("+", Prec::lassoc(50)),
     ("*", Prec::lassoc(60)),
 ];
-const KEYWORDTABLE: &[&str] = &["=", ":", "==", "↦", "->"];
+const KEYWORDTABLE: &[&str] = &["=", ":", ":=", "==", "↦", "->"];
 
 pub fn with_parsed<T, F: FnMut(&FExp) -> T>(
     input: &str,

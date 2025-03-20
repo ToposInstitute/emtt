@@ -1,46 +1,86 @@
 {
-  MonoidOn[t: @type]: @theory = {
+  CMonoidOn[t: @type]: @theory = {
     op: [x: t, y: t] -> t;
     zero: t;
     assoc: [x: t, y: t, z: t] -> op[x,op[y,z]] == op[op[x,y],z];
+    comm: [x: t, y: t] -> op[x, y] == op[y, x];
     unit: [x:t] -> op[x, zero] == x;
   };
 
-  Monoid: @theory = {
+  CMonoid: @theory = {
     t: @type;
-    m: MonoidOn[t];
+    m: CMonoidOn[t];
   };
 
   CGroupOn[t: @type]: @theory = {
-    m: MonoidOn[t];
-    op := m.op;
-    zero := m.zero;
-    inv: [x: t] -> { val: t; op[x, val] == zero; };
-    comm: [x: t, y: t] -> op[x, y] == op[y, x];
+    m: CMonoidOn[t];
+    op : [x: t, y: t] -> t := m.op;
+    zero : t := m.zero;
+    assoc: [x: t, y: t, z: t] -> op[x,op[y,z]] == op[op[x,y],z] := m.assoc;
+    unit: [x:t] -> op[x, zero] == x := m.unit;
+    comm: [x: t, y: t] -> op[x, y] == op[y, x] := m.comm;
+    inv: [x: t] -> t;
+    isinv: [x: t] -> op[x, inv[x]] == zero;
   };
 
   RingOn[t: @type]: @theory = {
     plus: CGroupOn[t];
-    mul: MonoidOn[t];
+    mul: CMonoidOn[t];
 
-    (+) := plus.op;
-    zero := plus.zero;
-    neg := plus.inv;
-    (*) := times.op;
-    one := times.zero;
+    `+ : [x: t, y: t] -> t := plus.op;
+    zero : t := plus.zero;
+    neg : [x:t] -> t := plus.inv;
+    `* : [x: t, y: t] -> t := mul.op;
+    one : t := mul.zero;
 
     dist: [x: t, y: t, z: t] -> x * (y + z) == (x * y) + (x * z);
   };
 
   Lemmas[t: @type, R: RingOn[t]]: @theory = {
-    %open R;
+    `+ : [x: t, y: t] -> t := R.plus.op;
+    zero : t := R.zero;
+    neg : [x:t] -> t := R.neg;
+    `* : [x: t, y: t] -> t := R.mul.op;
+    one : t := R.one;
 
-    neg_is_unique : [x: t, y: t, eq: x + y == zero] -> y == neg[x].val;
+    neg_is_unique : [x: t, y: t, eq: x + y == zero] -> y == neg[x];
 
     mul_zero_is_zero: [x: t] -> x * zero == zero;
 
-    negation_via_mul_neg_one_lemma: [x: t] -> x + neg[one].val * x == zero;
-
     negation_via_mul_neg_one: [x: t] -> neg[one] * x == neg[x];
+  };
+
+  LemmasImpl[t: @type, R: RingOn[t]]: Lemmas[t, R] = {
+    neg_is_unique = [x, y, _] ↦ {
+      nx = neg[x];
+      R.plus.assoc[nx, x, y];
+      R.plus.unit[nx];
+      R.plus.unit[y];
+      R.plus.comm[nx, zero];
+      R.plus.comm[y, zero];
+      R.plus.isinv[x];
+      R.plus.comm[x, nx];
+      %dump "neg_is_unique.svg";
+      @refl
+    };
+
+    mul_zero_is_zero = [x] ↦ {
+      R.plus.unit[zero];
+      R.dist[x, zero, zero];
+      R.plus.assoc[x * zero, x * zero, neg[x * zero]];
+      R.plus.isinv[x * zero];
+      R.plus.unit[x * zero];
+      @refl
+    };
+
+    negation_via_mul_neg_one = [x] ↦ {
+      R.mul.unit[x];
+      R.mul.comm[x, neg[one]];
+      R.dist[x, one, neg[one]];
+      R.plus.isinv[one];
+      mul_zero_is_zero[x];
+      neg_is_unique[x, neg[one] * x, @refl];
+      @refl
+    };
   };
 }

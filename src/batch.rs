@@ -13,7 +13,7 @@ pub fn check(input: &str) -> Option<()> {
         match ast.ast0() {
             Block(decls, None) => {
                 for decl in decls.iter() {
-                    if toplevel.elab(decl).is_none() {
+                    if toplevel.elab_sequent(decl).is_none() {
                         success = false;
                     }
                 }

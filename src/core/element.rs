@@ -36,7 +36,7 @@ impl fmt::Display for Neutral {
             Neutral::Var(l) => write!(f, "{}", l.name()),
             Neutral::Proj(_, field) => write!(f, ".{}", field.name()),
             Neutral::ModelProj(_, field, _, _) => write!(f, ".{}", field.name()),
-            Neutral::App(_, _, _, _) => write!(f, "app"),
+            Neutral::App(head, _, _, _) => write!(f, "{}", head),
         }
     }
 }

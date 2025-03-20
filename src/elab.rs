@@ -59,7 +59,7 @@ impl Elaborator {
         exprs: &[&FExp],
         tele: &Tele,
     ) -> Option<(Vec<ModelStx>, Vec<Model>)> {
-        if exprs.len() != tele.len() {
+        if exprs.len() != tele.num_decls() {
             return error!(
                 self,
                 "wrong number of arguments, expected {} got {}",
@@ -70,9 +70,19 @@ impl Elaborator {
         let mut stxs = Vec::new();
         let mut models = Vec::new();
         let mut env = Env::empty();
-        for (e, (_, thstx)) in exprs.iter().zip(tele.iter()) {
-            let th = ctx.evaluator_mut().eval_theory(&env, thstx);
-            let (modelstx, model) = self.chk_model(ctx, e, &th)?;
+        let mut ei = exprs.iter();
+        for (_, telelement) in tele.iter() {
+            let (modelstx, model) = match telelement {
+                stx::Telelement::Decl(thstx) => {
+                    let e = ei.next().unwrap();
+                    let th = ctx.evaluator_mut().eval_theory(&env, thstx);
+                    self.chk_model(ctx, e, &th)?
+                }
+                stx::Telelement::Def(modelstx, _) => (
+                    modelstx.clone(),
+                    ctx.evaluator_mut().eval_model(&env, modelstx),
+                ),
+            };
             env = env.push(model.clone());
             stxs.push(modelstx);
             models.push(model);
@@ -87,7 +97,7 @@ impl Elaborator {
         exprs: &[&FExp],
         tele: &Tele,
     ) -> Option<(Vec<EltStx>, Vec<Elt>, Env)> {
-        if exprs.len() != tele.len() {
+        if exprs.len() != tele.num_decls() {
             return error!(
                 self,
                 "wrong number of arguments, expected {} got {}",
@@ -97,9 +107,18 @@ impl Elaborator {
         }
         let mut stxs = Vec::new();
         let mut elts = Vec::new();
-        for (e, (_, tpstx)) in exprs.iter().zip(tele.iter()) {
-            let tp = ctx.evaluator_mut().eval_type(&env, tpstx);
-            let (eltstx, elt) = self.chk_elt(ctx, e, &tp)?;
+        let mut ei = exprs.iter();
+        for (_, te) in tele.iter() {
+            let (eltstx, elt) = match te {
+                stx::Telelement::Decl(tpstx) => {
+                    let e = ei.next().unwrap();
+                    let tp = ctx.evaluator_mut().eval_type(&env, tpstx);
+                    self.chk_elt(ctx, e, &tp)?
+                }
+                stx::Telelement::Def(eltstx, _) => {
+                    (eltstx.clone(), ctx.evaluator_mut().eval_elt(&env, eltstx))
+                }
+            };
             env = env.push(Model::Elt(elt.clone()));
             stxs.push(eltstx);
             elts.push(elt);
@@ -115,8 +134,8 @@ impl Elaborator {
         mut tele_env: Env,
         exprs: &[&FExp],
         tele: &Tele,
-    ) -> Option<(Tele, Vec<Model>)> {
-        if exprs.len() != tele.len() {
+    ) -> Option<(TeleCons, Vec<Model>)> {
+        if exprs.len() != tele.num_decls() {
             return error!(
                 self,
                 "wrong number of bindings, expected {} got {}",
@@ -126,25 +145,40 @@ impl Elaborator {
         }
         let mut stxs = Vec::new();
         let mut models = Vec::new();
-        for (e, (name, thstx)) in exprs.iter().zip(tele.iter()) {
-            let th = ctx.evaluator_mut().eval_theory(&tele_env, thstx);
-            let fieldexpr = match e.ast0() {
-                App2(L(_, Keyword("=")), fe @ L(_, Var(s)), e) => {
-                    if Name(Some(ustr(s))) == *name {
-                        e
-                    } else {
-                        return error!(self.at(fe), "unexpected field {}", s);
-                    }
+        let mut ei = exprs.iter();
+        for (name, te) in tele.iter() {
+            let (fieldstx, fieldval, th) = match te {
+                stx::Telelement::Decl(thstx) => {
+                    let e = ei.next().unwrap();
+                    let th = ctx.evaluator_mut().eval_theory(&tele_env, thstx);
+                    let fieldexpr = match e.ast0() {
+                        App2(L(_, Keyword("=")), fe @ L(_, Var(s)), e) => {
+                            if Name(Some(ustr(s))) == *name {
+                                e
+                            } else {
+                                return error!(self.at(fe), "unexpected field {}", s);
+                            }
+                        }
+                        _ => return error!(self.at(e), "expected syntax node <var> = <expr>"),
+                    };
+                    let (fieldstx, fieldval) = self.chk_model(ctx, fieldexpr, &th)?;
+                    (fieldstx, fieldval, th)
                 }
-                _ => return error!(self.at(e), "expected syntax node <var> = <expr>"),
+                stx::Telelement::Def(modelstx, thstx) => {
+                    let env = ctx.env.clone();
+                    (
+                        modelstx.clone(),
+                        ctx.evaluator_mut().eval_model(&env, modelstx),
+                        ctx.evaluator_mut().eval_theory(&env, thstx),
+                    )
+                }
             };
-            let (fieldstx, fieldval) = self.chk_model(ctx, fieldexpr, &th)?;
             stxs.push((*name, fieldstx));
             models.push(fieldval.clone());
             tele_env = tele_env.push(fieldval.clone());
             ctx.let_bind(*name, fieldval, &th);
         }
-        Some((Tele::from_vec(stxs), models))
+        Some((TeleCons::from_vec(stxs), models))
     }
 
     fn chk_elt_tele(
@@ -153,8 +187,8 @@ impl Elaborator {
         mut tele_env: Env,
         exprs: &[&FExp],
         tele: &Tele,
-    ) -> Option<(Tele, Vec<Elt>)> {
-        if exprs.len() != tele.len() {
+    ) -> Option<(TeleCons, Vec<Elt>)> {
+        if exprs.len() != tele.num_decls() {
             return error!(
                 self,
                 "wrong number of bindings, expected {} got {}",
@@ -164,50 +198,81 @@ impl Elaborator {
         }
         let mut stxs = Vec::new();
         let mut elts = Vec::new();
-        for (e, (name, tpstx)) in exprs.iter().zip(tele.iter()) {
-            let tp = ctx.evaluator_mut().eval_type(&tele_env, tpstx);
-            let fieldexpr = match e.ast0() {
-                App2(L(_, Keyword("=")), fe @ L(_, Var(s)), e) => {
-                    if Name(Some(ustr(s))) == *name {
-                        e
-                    } else {
-                        return error!(self.at(fe), "unexpected field {}", s);
-                    }
+        let mut ei = exprs.iter();
+        for (name, te) in tele.iter() {
+            let (fieldstx, fieldval, tp) = match te {
+                stx::Telelement::Decl(tpstx) => {
+                    let e = ei.next().unwrap();
+                    let tp = ctx.evaluator_mut().eval_type(&tele_env, tpstx);
+                    let fieldexpr = match e.ast0() {
+                        App2(L(_, Keyword("=")), fe @ L(_, Var(s)), e) => {
+                            if Name(Some(ustr(s))) == *name {
+                                e
+                            } else {
+                                return error!(self.at(fe), "unexpected field {}", s);
+                            }
+                        }
+                        _ => return error!(self.at(e), "expected syntax node <var> = <expr>"),
+                    };
+                    let (fieldstx, fieldval) = self.chk_elt(ctx, fieldexpr, &tp)?;
+                    (fieldstx, fieldval, tp)
                 }
-                _ => return error!(self.at(e), "expected syntax node <var> = <expr>"),
+                stx::Telelement::Def(eltstx, tpstx) => {
+                    let env = ctx.env.clone();
+                    (
+                        eltstx.clone(),
+                        ctx.evaluator_mut().eval_elt(&env, eltstx),
+                        ctx.evaluator_mut().eval_type(&env, tpstx),
+                    )
+                }
             };
-            let (fieldstx, fieldval) = self.chk_elt(ctx, fieldexpr, &tp)?;
             stxs.push((*name, fieldstx));
             elts.push(fieldval.clone());
             tele_env = tele_env.push(Model::Elt(fieldval.clone()));
             ctx.let_bind(*name, Model::Elt(fieldval), &Theory::Type(tp));
         }
-        Some((Tele::from_vec(stxs), elts))
+        Some((TeleCons::from_vec(stxs), elts))
     }
 
     // this intros variables, so we must reset the context afterwards
     fn syn_tp_tele(&self, ctx: &mut Ctx, exprs: &[&FExp]) -> Option<Tele> {
         let mut stxs = Vec::new();
-        for e in exprs {
-            let (name, tpexpr) = match e.ast0() {
-                App2(L(_, Keyword(":")), L(_, Var(s)), tpexpr) => (Name(Some(ustr(s))), tpexpr),
-                _ => (Name(None), e),
-            };
+        let add_decl = |ctx: &mut Ctx, stxs: &mut Vec<_>, name, tpexpr| {
             let (tpstx, tp) = self.tp(ctx, tpexpr)?;
             ctx.intro_elt(name, &tp);
-            stxs.push((name, tpstx));
+            stxs.push((name, stx::Telelement::Decl(tpstx)));
+            Some(())
+        };
+        for e in exprs {
+            match e.ast0() {
+                App2(L(_, Keyword(":")), L(_, Var(s)), tpexpr) => {
+                    add_decl(ctx, &mut stxs, Name(Some(ustr(s))), tpexpr)?;
+                }
+                App2(
+                    L(_, Keyword(":=")),
+                    L(_, App2(L(_, Keyword(":")), L(_, Var(s)), tpexpr)),
+                    eltexpr,
+                ) => {
+                    let name = Name(Some(ustr(s)));
+                    let (tpstx, tp) = self.tp(ctx, tpexpr)?;
+                    let (eltstx, elt) = self.chk_elt(ctx, eltexpr, &tp)?;
+                    stxs.push((name, stx::Telelement::Def(eltstx, tpstx)));
+                    ctx.let_bind(name, Model::Elt(elt), &Theory::Type(tp))
+                }
+                _ => add_decl(ctx, &mut stxs, Name(None), e)?,
+            };
         }
         Some(Tele::from_vec(stxs))
     }
 
-    fn intro_elt(&self, ctx: &mut Ctx, binding: &FExp) -> Option<(Name, TypeStx)> {
+    fn intro_elt(&self, ctx: &mut Ctx, binding: &FExp) -> Option<(Name, stx::Telelement)> {
         let (name, tpexpr) = match binding.ast0() {
             App2(L(_, Keyword(":")), L(_, Var(s)), tpexpr) => (Name(Some(ustr(s))), *tpexpr),
             _ => (Name(None), binding),
         };
         let (tpstx, tp) = self.tp(ctx, tpexpr)?;
         ctx.intro_elt(name, &tp);
-        Some((name, tpstx))
+        Some((name, stx::Telelement::Decl(tpstx)))
     }
 
     fn intro_elts(&self, ctx: &mut Ctx, bindings: &[&FExp]) -> Option<Tele> {
@@ -289,7 +354,7 @@ impl Elaborator {
             Theory::Pi(env, pi) => (env.clone(), pi.clone()),
             _ => return error!(self, "can only check lam against pi theory"),
         };
-        if args.len() != pi.args.len() {
+        if args.len() != pi.args.num_decls() {
             return error!(
                 self,
                 "expected {} bindings in head of lam, got {}",
@@ -297,14 +362,24 @@ impl Elaborator {
                 args.len()
             );
         }
-        for (argexpr, (_, tpstx)) in args.iter().zip(pi.args.iter()) {
-            let name = match argexpr.ast0() {
-                Var("_") => Name(None),
-                Var(s) => Name(Some(ustr(s))),
-                _ => return error!(self.at(argexpr), "expected variable or underscore"),
+        let mut ei = args.iter();
+        for (_, te) in pi.args.iter() {
+            let e = match te {
+                stx::Telelement::Decl(tpstx) => {
+                    let argexpr = ei.next().unwrap();
+                    let name = match argexpr.ast0() {
+                        Var("_") => Name(None),
+                        Var(s) => Name(Some(ustr(s))),
+                        _ => return error!(self.at(argexpr), "expected variable or underscore"),
+                    };
+                    let tp = ctx.evaluator_mut().eval_type(&pienv, tpstx);
+                    ctx.intro_elt(name, &tp)
+                }
+                stx::Telelement::Def(tmstx, _) => {
+                    let env = ctx.env.clone();
+                    ctx.evaluator_mut().eval_elt(&env, tmstx)
+                }
             };
-            let tp = ctx.evaluator_mut().eval_type(&pienv, tpstx);
-            let e = ctx.intro_elt(name, &tp);
             pienv = pienv.push(Model::Elt(e));
         }
         let retth = ctx.evaluator_mut().eval_theory(&pienv, &pi.ret);
@@ -394,6 +469,11 @@ impl Elaborator {
                 let (headstx, headval, headth) = self.syn_model(ctx, h)?;
                 self.at(h).model_app(ctx, headval, headstx, &headth, args)
             }
+            App2(h @ L(_, Var(_)), arg1, arg2) => {
+                let (headstx, headval, headth) = self.syn_model(ctx, h)?;
+                self.at(h)
+                    .model_app(ctx, headval, headstx, &headth, &[arg1, arg2])
+            }
             App1(h, fe @ L(_, Field(f))) => {
                 let (hstx, hval, hth) = self.syn_model(ctx, h)?;
                 match hth {
@@ -412,7 +492,7 @@ impl Elaborator {
                         };
                         let th = ctx
                             .evaluator_mut()
-                            .eval_theory(&env, &theorysq.body.get(field).1);
+                            .eval_theory(&env, &theorysq.body.get(field).1.thstx());
                         Some((Stx::Proj(Rc::new(hstx), field), val, th))
                     }
                     Theory::Type(Type::Record(env, tele)) => {
@@ -426,7 +506,9 @@ impl Elaborator {
                             ),
                             _ => panic!("expected values of record type to be eta-expanded"),
                         };
-                        let tp = ctx.evaluator_mut().eval_type(&env, &tele.get(field).1);
+                        let tp = ctx
+                            .evaluator_mut()
+                            .eval_type(&env, &tele.get(field).1.thstx());
                         Some((
                             Stx::Proj(Rc::new(hstx), field),
                             Model::Elt(val),
@@ -455,6 +537,14 @@ impl Elaborator {
                 ret
             }
             App2(L(_, Keyword("↦")), _, _) => error!(self.at(e), "must check lambdas"),
+            App1(L(_, Special("dump")), L(_, Str(fname))) => {
+                ctx.dump(fname);
+                Some((
+                    Stx::EltCons(TeleCons::from_vec(vec![])),
+                    Model::Elt(Elt::Cons(Rc::new(vec![]))),
+                    Theory::Type(Type::Record(ctx.env.clone(), Tele::from_vec(vec![]))),
+                ))
+            }
             Block(_, None) => error!(self.at(e), "must check model records"),
             _ => error!(
                 self.at(e),
@@ -481,7 +571,7 @@ impl Elaborator {
         }
         let (retstx, ret, retth) = self.syn_model(ctx, retexp)?;
         Some((
-            Stx::Block(Tele::from_vec(stxs), Rc::new(retstx)),
+            Stx::Block(TeleCons::from_vec(stxs), Rc::new(retstx)),
             ret,
             retth,
         ))
@@ -505,7 +595,7 @@ impl Elaborator {
             ctx.let_bind(name, val, &th);
         }
         let (retstx, ret) = self.chk_model(ctx, retexp, th)?;
-        Some((Stx::Block(Tele::from_vec(stxs), Rc::new(retstx)), ret))
+        Some((Stx::Block(TeleCons::from_vec(stxs), Rc::new(retstx)), ret))
     }
 
     fn syn_elt(&self, ctx: &mut Ctx, e: &FExp) -> Option<(EltStx, Elt, Type)> {
@@ -595,14 +685,30 @@ impl Elaborator {
 
     pub fn syn_th_tele(&self, ctx: &mut Ctx, bindings: &[&FExp]) -> Option<Tele> {
         let mut stxs = Vec::new();
+        let add_decl = |ctx: &mut Ctx, stxs: &mut Vec<_>, name, thexpr| {
+            let (thstx, th) = self.theory(ctx, thexpr)?;
+            stxs.push((name, stx::Telelement::Decl(thstx)));
+            ctx.intro_model(name, &th);
+            Some(())
+        };
         for binding in bindings {
-            let (name, thexpr) = match binding.ast0() {
-                App2(L(_, Keyword(":")), L(_, Var(s)), thexpr) => (Name(Some(ustr(s))), thexpr),
+            match binding.ast0() {
+                App2(L(_, Keyword(":")), L(_, Var(s)), thexpr) => {
+                    add_decl(ctx, &mut stxs, Name(Some(ustr(s))), thexpr);
+                }
+                App2(
+                    L(_, Keyword(":=")),
+                    L(_, App2(L(_, Keyword(":")), L(_, Var(s)), thexpr)),
+                    modelexpr,
+                ) => {
+                    let name = Name(Some(ustr(s)));
+                    let (thstx, th) = self.theory(ctx, thexpr)?;
+                    let (modelstx, model) = self.chk_model(ctx, modelexpr, &th)?;
+                    stxs.push((name, stx::Telelement::Def(modelstx, thstx)));
+                    ctx.let_bind(name, model, &th);
+                }
                 _ => return error!(self.at(binding), "expected binding <var> : <theory>"),
             };
-            let (thstx, th) = self.theory(ctx, thexpr)?;
-            stxs.push((name, thstx));
-            ctx.intro_model(name, &th);
         }
         Some(Tele::from_vec(stxs))
     }

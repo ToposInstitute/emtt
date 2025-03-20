@@ -2,7 +2,7 @@ pub mod names;
 pub use names::*;
 
 pub mod stx;
-pub use stx::{EltStx, Lam, ModelStx, Pi, Stx, Tele, TheoryStx, TypeStx};
+pub use stx::{EltStx, Lam, ModelStx, Pi, Stx, Tele, TeleCons, TheoryStx, TypeStx};
 
 pub mod element;
 pub use element::{Elt, FlattenedElt};
