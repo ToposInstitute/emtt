@@ -12,7 +12,7 @@ pub fn check(input: &str) {
         match ast.ast0() {
             Block(decls, None) => {
                 for decl in decls.iter() {
-                    let _ = toplevel.elab_sequent(decl);
+                    let _ = toplevel.elab(decl);
                 }
             }
             _ => reporter.error(ast.loc(), TOP_ERROR, |f| {

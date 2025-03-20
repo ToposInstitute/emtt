@@ -1,5 +1,6 @@
 use super::*;
 use egg::{Id, Language};
+use std::fmt;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -18,6 +19,17 @@ pub enum Neutral {
     Proj([Id; 1], Field),
     ModelProj(Rc<model::Neutral>, Field, Rc<Type>, Vec<Id>),
     App(Rc<model::Neutral>, Rc<Vec<Elt>>, Rc<Type>, Vec<Id>),
+}
+
+impl fmt::Display for Neutral {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Neutral::Var(l) => write!(f, "{}", l.name()),
+            Neutral::Proj(_, field) => write!(f, ".{}", field.name()),
+            Neutral::ModelProj(mneu, field, _, args) => write!(f, ".{}", field.name()),
+            Neutral::App(_, _, _, _) => write!(f, "app"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

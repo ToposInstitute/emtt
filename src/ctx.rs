@@ -8,7 +8,7 @@ use crate::{
     symtable::{self, SymTable},
     toplevel::Toplevel,
 };
-use std::{borrow::BorrowMut, rc::Rc};
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum Binding {

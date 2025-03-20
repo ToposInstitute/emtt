@@ -240,13 +240,14 @@ impl Elaborator {
                 ctx.return_to(c);
                 ret
             }
-            App1(h @ L(_, Var(s)), tup @ L(_, Tuple(args))) => {
+            App1(L(_, Var(s)), tup @ L(_, Tuple(args))) => {
                 let Some(tn) = ctx.topname(ustr(s)) else {
                     let (tpstx, tp) = self.tp(ctx, e)?;
                     return Some((tpstx, Theory::Type(tp)));
                 };
                 let Some(thdecl) = ctx.toplevel().try_theory(tn) else {
-                    return error!(self.at(h), "expected {} to refer to a theory", s);
+                    let (tpstx, tp) = self.tp(ctx, e)?;
+                    return Some((tpstx, Theory::Type(tp)));
                 };
                 let (argstxs, argmodels) =
                     self.at(tup)
@@ -285,8 +286,8 @@ impl Elaborator {
         }
         for (argexpr, (_, tpstx)) in args.iter().zip(pi.args.iter()) {
             let name = match argexpr.ast0() {
+                Var("_") => Name(None),
                 Var(s) => Name(Some(ustr(s))),
-                Underscore => Name(None),
                 _ => return error!(self.at(argexpr), "expected variable or underscore"),
             };
             let tp = ctx.evaluator_mut().eval_type(&pienv, tpstx);
@@ -542,7 +543,7 @@ impl Elaborator {
         Some((stx, m.as_elt()))
     }
 
-    fn syn_th_tele(&self, ctx: &mut Ctx, bindings: &[&FExp]) -> Option<Tele> {
+    pub fn syn_th_tele(&self, ctx: &mut Ctx, bindings: &[&FExp]) -> Option<Tele> {
         let mut stxs = Vec::new();
         for binding in bindings {
             let (name, thexpr) = match binding.ast0() {

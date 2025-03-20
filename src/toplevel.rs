@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use bumpalo::Bump;
 use egg::EGraph;
-use fexplib::{grammar::parse, lexer::lex, parser::Prec, types::FExp};
+use fexplib::{grammar::parse, lexer::lex, parser::Prec, types::*};
 use tattle::Reporter;
 
 use crate::{
@@ -72,7 +72,7 @@ impl Toplevel {
     pub fn try_theory(&self, name: TopName) -> Option<&TheorySq> {
         match self.sequent(name) {
             Sequent::Theory(t) => Some(t),
-            _ => panic!("expected theory"),
+            _ => None,
         }
     }
 
@@ -94,6 +94,24 @@ impl TopElaborator {
             toplevel: Toplevel::empty(),
             symtable: SymTable::empty(),
         }
+    }
+
+    pub fn elab(&mut self, e: &FExp) -> Option<()> {
+        match e.ast0() {
+            App1(L(_, App1(L(_, Special("dump")), L(_, Str(file)))), L(_, Tuple(args))) => {
+                self.dump(file, args)
+            }
+            _ => self.elab_sequent(e),
+        }
+    }
+
+    pub fn dump(&mut self, file: &str, args: &[&FExp]) -> Option<()> {
+        let evaluator = Evaluator::new(&self.toplevel, EGraph::new(TypeAnalysis::new()));
+        let mut ctx = Ctx::new(Env::empty(), Rc::new(evaluator), &mut self.symtable);
+        let elab = Elaborator::new(self.reporter.clone());
+        elab.syn_th_tele(&mut ctx, args);
+        ctx.evaluator.cron.dot().to_svg(file).unwrap();
+        Some(())
     }
 
     pub fn elab_sequent(&mut self, e: &FExp) -> Option<()> {
