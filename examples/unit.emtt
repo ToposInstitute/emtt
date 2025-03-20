@@ -1,0 +1,5 @@
+{
+  Unit: @type = {};
+
+  Units: @type = { x: Unit; y: Unit; };
+}

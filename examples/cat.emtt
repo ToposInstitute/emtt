@@ -1,5 +1,5 @@
 {
-  Cat[] : @theory = {
+  Cat: @theory = {
     ob: @type;
     hom: [x: ob, y: ob] -> @type;
     id: [x: ob] -> hom[x, x];
@@ -10,12 +10,12 @@
       compose[x, z, w, compose[x,y,z,f,g], h] == compose[x,y,w,f,compose[y,z,w,g,h]];
   };
 
-  Functor[C: Cat[], D: Cat[]]: @theory = {
+  Functor[C: Cat, D: Cat]: @theory = {
     ob: [x: C.ob] -> D.ob;
     hom: [x: C.ob, y: C.ob] -> [f: C.hom[x,y]] -> D.hom[ob[x], ob[y]];
   };
 
-  Slice[C: Cat[]]: [over: C.ob] -> Cat[] = [over] ↦ {
+  Slice[C: Cat]: [over: C.ob] -> Cat = [over] ↦ {
     ob = {
       top: C.ob;
       map: C.hom[top, over];

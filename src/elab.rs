@@ -231,7 +231,27 @@ impl Elaborator {
             .or_else(|| error!(self, "could not find variable {}", name.as_str()))
     }
 
-    fn theory(&self, ctx: &mut Ctx, e: &FExp) -> Option<(TheoryStx, Theory)> {
+    fn theory_app(
+        &self,
+        ctx: &mut Ctx,
+        s: &str,
+        args: Option<&[&FExp]>,
+    ) -> Option<(TheoryStx, Theory)> {
+        let tn = ctx.topname(ustr(s))?;
+        let thdecl = ctx.toplevel().try_theory(tn)?;
+        let (argstxs, argmodels) = match (thdecl.args.as_ref(), args) {
+            (Some(declargs), Some(args)) => self.chk_model_tuple(ctx, args, declargs)?,
+            (None, None) => (vec![], vec![]),
+            (Some(_), None) => return error!(self, "expected arguments, found none"),
+            (None, Some(_)) => return error!(self, "expected no arguments, found some"),
+        };
+        Some((
+            Stx::TopApp(tn, argstxs),
+            Theory::TopApp(tn, Rc::new(argmodels)),
+        ))
+    }
+
+    fn real_theory(&self, ctx: &mut Ctx, e: &FExp) -> Option<(TheoryStx, Theory)> {
         match e.ast0() {
             Prim("type") => Some((Stx::Tp, Theory::Tp)),
             App2(L(_, Keyword("->")), L(_, Tuple(args)), body) => {
@@ -240,24 +260,17 @@ impl Elaborator {
                 ctx.return_to(c);
                 ret
             }
-            App1(L(_, Var(s)), tup @ L(_, Tuple(args))) => {
-                let Some(tn) = ctx.topname(ustr(s)) else {
-                    let (tpstx, tp) = self.tp(ctx, e)?;
-                    return Some((tpstx, Theory::Type(tp)));
-                };
-                let Some(thdecl) = ctx.toplevel().try_theory(tn) else {
-                    let (tpstx, tp) = self.tp(ctx, e)?;
-                    return Some((tpstx, Theory::Type(tp)));
-                };
-                let (argstxs, argmodels) =
-                    self.at(tup)
-                        .chk_model_tuple(ctx, args.as_slice(), &thdecl.args)?;
-                Some((
-                    Stx::TopApp(tn, argstxs),
-                    Theory::TopApp(tn, Rc::new(argmodels)),
-                ))
-            }
-            _ => {
+            Var(s) => self.at(e).theory_app(ctx, s, None),
+            App1(L(_, Var(s)), L(_, Tuple(args))) => self.at(e).theory_app(ctx, s, Some(&args)),
+            _ => None,
+        }
+    }
+
+    fn theory(&self, ctx: &mut Ctx, e: &FExp) -> Option<(TheoryStx, Theory)> {
+        // try to get a real theory out, otherwise fall back to type
+        match self.real_theory(ctx, e) {
+            Some(t) => Some(t),
+            None => {
                 let (tpstx, tp) = self.tp(ctx, e)?;
                 Some((tpstx, Theory::Type(tp)))
             }
@@ -332,84 +345,121 @@ impl Elaborator {
             Var(s) => match self.at(e).lookup(ctx, ustr(s))? {
                 Binding::Local(l, th) => {
                     let i = ctx.lvl_to_idx(l);
-                    Some((
-                    Stx::Var(i),
-                    ctx.env.get(i),
-                    th,
-                ))},
-                Binding::Toplevel(_) => error!(
-                    self.at(e),
-                    "binding {} refers to a toplevel theory or model, one must explicitly call it with braces like []", s
-                ),
+                    Some((Stx::Var(i), ctx.env.get(i), th))
+                }
+                Binding::Toplevel(tn) => {
+                    let Some(modelsequent) = ctx.toplevel().try_model(tn) else {
+                        return error!(
+                            self.at(e),
+                            "expected {} to refer to a model sequent",
+                            tn.name()
+                        );
+                    };
+                    let None = modelsequent.args.as_ref() else {
+                        return error!(
+                            self.at(e),
+                            "expected {} to refer to a model sequent with no args",
+                            tn.name()
+                        );
+                    };
+                    let env = Env::empty();
+                    let theory = ctx.evaluator_mut().eval_theory(&env, &modelsequent.theory);
+                    let model = ctx.evaluator_mut().eval_model(&env, &modelsequent.body);
+                    Some((Stx::TopApp(tn, vec![]), model, theory))
+                }
             },
-            App1(h @ L(_, Var(s)), L(_, Tuple(args))) => {
-                match self.at(h).lookup(ctx, ustr(s))? {
-                    Binding::Toplevel(tn) => {
-                        let Some(modelsequent) = ctx.toplevel().try_model(tn) else {
-                            return error!(self.at(h), "expected {} to refer to a model sequent", s)
-                        };
-                        let (argstxs, argmodels) = self.chk_model_tuple(ctx, args.as_slice(), &modelsequent.args)?;
-                        let env: Env = argmodels.into_iter().into();
-                        let theory = ctx.evaluator_mut().eval_theory(&env, &modelsequent.theory);
-                        let model = ctx.evaluator_mut().eval_model(&env, &modelsequent.body);
-                        Some((Stx::TopApp(tn, argstxs), model, theory))
-                    },
-                    Binding::Local(l, th) => {
-                        let i = ctx.lvl_to_idx(l);
-                        let headstx = Stx::Var(i);
-                        let headval = ctx.env.get(i);
-                        self.at(h).model_app(ctx, headval, headstx, &th, args)
-                    },
+            App1(h @ L(_, Var(s)), L(_, Tuple(args))) => match self.at(h).lookup(ctx, ustr(s))? {
+                Binding::Toplevel(tn) => {
+                    let Some(modelsequent) = ctx.toplevel().try_model(tn) else {
+                        return error!(self.at(h), "expected {} to refer to a model sequent", s);
+                    };
+                    let Some(declargs) = modelsequent.args.as_ref() else {
+                        return error!(self.at(h), "expected {} to take arguments", s);
+                    };
+                    let (argstxs, argmodels) =
+                        self.chk_model_tuple(ctx, args.as_slice(), declargs)?;
+                    let env: Env = argmodels.into_iter().into();
+                    let theory = ctx.evaluator_mut().eval_theory(&env, &modelsequent.theory);
+                    let model = ctx.evaluator_mut().eval_model(&env, &modelsequent.body);
+                    Some((Stx::TopApp(tn, argstxs), model, theory))
+                }
+                Binding::Local(l, th) => {
+                    let i = ctx.lvl_to_idx(l);
+                    let headstx = Stx::Var(i);
+                    let headval = ctx.env.get(i);
+                    self.at(h).model_app(ctx, headval, headstx, &th, args)
                 }
             },
             App1(h, L(_, Tuple(args))) => {
                 let (headstx, headval, headth) = self.syn_model(ctx, h)?;
                 self.at(h).model_app(ctx, headval, headstx, &headth, args)
-            },
-            App1(h, fe@L(_, Field(f))) => {
+            }
+            App1(h, fe @ L(_, Field(f))) => {
                 let (hstx, hval, hth) = self.syn_model(ctx, h)?;
                 match hth {
                     Theory::TopApp(tn, args) => {
                         let theorysq = ctx.toplevel().theory(tn);
                         let Some(field) = theorysq.body.find_field(ustr(f)) else {
-                            return error!(self.at(fe), "no such field")
+                            return error!(self.at(fe), "no such field");
                         };
                         let env: Env = args.iter().cloned().into();
                         let (env, val) = match hval {
-                            Model::Cons(fields) => (env.extend(fields.iter().cloned().take(field.lvl())), fields[field.lvl()].clone()),
-                            _ => panic!("expected values of record type to be eta-expanded")
+                            Model::Cons(fields) => (
+                                env.extend(fields.iter().cloned().take(field.lvl())),
+                                fields[field.lvl()].clone(),
+                            ),
+                            _ => panic!("expected values of record type to be eta-expanded"),
                         };
-                        let th = ctx.evaluator_mut().eval_theory(&env, &theorysq.body.get(field).1);
+                        let th = ctx
+                            .evaluator_mut()
+                            .eval_theory(&env, &theorysq.body.get(field).1);
                         Some((Stx::Proj(Rc::new(hstx), field), val, th))
-                    },
+                    }
                     Theory::Type(Type::Record(env, tele)) => {
                         let Some(field) = tele.find_field(ustr(f)) else {
-                            return error!(self.at(fe), "no such field")
+                            return error!(self.at(fe), "no such field");
                         };
                         let (env, val) = match hval {
-                            Model::Elt(Elt::Cons(fields)) => (env.extend(fields.iter().cloned().take(field.lvl())), fields[field.lvl()].clone()),
-                            _ => panic!("expected values of record type to be eta-expanded")
+                            Model::Elt(Elt::Cons(fields)) => (
+                                env.extend(fields.iter().cloned().take(field.lvl())),
+                                fields[field.lvl()].clone(),
+                            ),
+                            _ => panic!("expected values of record type to be eta-expanded"),
                         };
                         let tp = ctx.evaluator_mut().eval_type(&env, &tele.get(field).1);
-                        Some((Stx::Proj(Rc::new(hstx), field), Model::Elt(val), Theory::Type(tp)))
-                    },
-                    _ => error!(self.at(e), "can only take projections of models or elements of record type")
+                        Some((
+                            Stx::Proj(Rc::new(hstx), field),
+                            Model::Elt(val),
+                            Theory::Type(tp),
+                        ))
+                    }
+                    _ => error!(
+                        self.at(e),
+                        "can only take projections of models or elements of record type"
+                    ),
                 }
-            },
+            }
             App2(L(_, Keyword("==")), le, re) => {
                 let (lstx, l, tp) = self.syn_elt(ctx, le)?;
                 let (rstx, r) = self.chk_elt(ctx, re, &tp)?;
-                Some((Stx::Equals(Rc::new(lstx), Rc::new(rstx)), Model::Type(Type::Equals(l, r)), Theory::Tp))
-            },
+                Some((
+                    Stx::Equals(Rc::new(lstx), Rc::new(rstx)),
+                    Model::Type(Type::Equals(l, r)),
+                    Theory::Tp,
+                ))
+            }
             Block(bindings, Some(ret)) => {
                 let c = ctx.checkpoint_lite();
                 let ret = self.syn_model_let(ctx, bindings, ret);
                 ctx.return_to_lite(c);
                 ret
-            },
+            }
             App2(L(_, Keyword("↦")), _, _) => error!(self.at(e), "must check lambdas"),
             Block(_, None) => error!(self.at(e), "must check model records"),
-            _ => error!(self.at(e), "unexpected syntax node for synthesizing elaboration"),
+            _ => error!(
+                self.at(e),
+                "unexpected syntax node for synthesizing elaboration"
+            ),
         }
     }
 
@@ -557,8 +607,16 @@ impl Elaborator {
         Some(Tele::from_vec(stxs))
     }
 
-    fn theory_sequent(&self, ctx: &mut Ctx, argexprs: &[&FExp], bodye: &FExp) -> Option<TheorySq> {
-        let args = self.syn_th_tele(ctx, argexprs)?;
+    fn theory_sequent(
+        &self,
+        ctx: &mut Ctx,
+        argexprs: Option<&[&FExp]>,
+        bodye: &FExp,
+    ) -> Option<TheorySq> {
+        let args = match argexprs {
+            Some(argexprs) => Some(self.syn_th_tele(ctx, argexprs)?),
+            None => None,
+        };
         let body = match bodye.ast0() {
             Block(bindings, None) => self.syn_th_tele(ctx, bindings)?,
             _ => return error!(self.at(bodye), "expected record"),
@@ -569,11 +627,14 @@ impl Elaborator {
     fn model_sequent(
         &self,
         ctx: &mut Ctx,
-        argexprs: &[&FExp],
+        argexprs: Option<&[&FExp]>,
         retthe: &FExp,
         bodye: &FExp,
     ) -> Option<ModelSq> {
-        let args = self.syn_th_tele(ctx, argexprs)?;
+        let args = match argexprs {
+            Some(argexprs) => Some(self.syn_th_tele(ctx, argexprs)?),
+            None => None,
+        };
         let (retthstx, retth) = self.theory(ctx, retthe)?;
         let (bodystx, _) = self.chk_model(ctx, bodye, &retth)?;
         Some(ModelSq::new(args, retthstx, bodystx))
@@ -585,7 +646,12 @@ impl Elaborator {
             _ => return error!(self.at(e), "expected sequent"),
         };
         let (name, argexprs, kindexpr) = match heade.ast0() {
-            App2(L(_, Keyword(":")), L(_, App1(L(_, Var(s)), L(_, Tuple(argexprs)))), kindexpr) => {
+            App2(L(_, Keyword(":")), head, kindexpr) => {
+                let (s, argexprs) = match head.ast0() {
+                    Var(s) => (s, None),
+                    App1(L(_, Var(s)), L(_, Tuple(argexprs))) => (s, Some(argexprs.as_slice())),
+                    _ => return error!(self.at(head), "expected <var> or <var>[<args>...]"),
+                };
                 (ustr(s), argexprs, kindexpr)
             }
             _ => {

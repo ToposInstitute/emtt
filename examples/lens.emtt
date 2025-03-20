@@ -1,30 +1,30 @@
 {
-  Arena[]: @theory = {
+  Arena: @theory = {
     base: @type;
     fiber: [x: base] -> @type;
   };
 
-  Simple[X: @type, Y: @type]: Arena[] = {
+  Simple[X: @type, Y: @type]: Arena = {
     base = X;
-    fiber = [x] ↦ Y;
+    fiber = [_] ↦ Y;
   };
 
-  Lens[X: Arena[], Y: Arena[]]: @theory = {
+  Lens[X: Arena, Y: Arena]: @theory = {
     fwd: [x: X.base] -> Y.base;
     bwd: [x: X.base, y: Y.fiber[fwd[x]]] -> X.fiber[x];
   };
 
-  Tangent[X: @type]: Arena[] = {
+  Tangent[X: @type]: Arena = {
     base = X;
     fiber = [_] ↦ base;
   };
 
-  Machine[A: Arena[]]: @theory = {
+  Machine[A: Arena]: @theory = {
     state: @type;
     l: Lens[Tangent[state], A];
   };
 
-  Compose[A: Arena[], B: Arena[], C: Arena[], L1: Lens[A, B], L2: Lens[B, C]]: Lens[A, C] = {
+  Compose[A: Arena, B: Arena, C: Arena, L1: Lens[A, B], L2: Lens[B, C]]: Lens[A, C] = {
     fwd = [x] ↦ L2.fwd[L1.fwd[x]];
     bwd = [x, z] ↦ L1.bwd[x, L2.bwd[L1.fwd[x], z]];
   };

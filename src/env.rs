@@ -1,7 +1,5 @@
-use crate::{core::*, cron::CRoN, toplevel::Toplevel};
+use crate::core::*;
 use bwd::Bwd;
-use egg::EGraph;
-use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct Env {

@@ -1,16 +1,16 @@
 {
-  Gr[] : @theory = {
+  Gr : @theory = {
     V: @type;
     E: [v1: V, v2: V] -> @type;
   };
 
-  TwoPath[G: Gr[]] : [x: G.V, z: G.V] -> @type = [x, z] ↦ {
+  TwoPath[G: Gr] : [x: G.V, z: G.V] -> @type = [x, z] ↦ {
     y: G.V;
     e1: G.E[x,y];
     e2: G.E[y,z];
   };
 
-  Joined[G: Gr[]] : @type = {
+  Joined[G: Gr] : @type = {
     x: G.V;
     z: G.V;
     p1: TwoPath[G][x,z];
@@ -18,5 +18,5 @@
     p1.y == p2.y;
   };
 
-  %dump "joined.svg" [G: Gr[], g: Joined[G]];
+  %dump "joined.svg" [G: Gr, g: Joined[G]];
 };

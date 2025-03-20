@@ -6,7 +6,7 @@
     unit: [x:t] -> op[x, zero] == x;
   };
 
-  Monoid[]: @theory = {
+  Monoid: @theory = {
     t: @type;
     m: MonoidOn[t];
   };

@@ -1,7 +1,7 @@
 use egg::Id;
 
 use super::*;
-use crate::{cron::CRoN, env::Env, eval::Evaluator};
+use crate::{env::Env, eval::Evaluator};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

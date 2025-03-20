@@ -16,24 +16,24 @@ use crate::{
 };
 
 pub struct ModelSq {
-    pub args: Tele,
+    pub args: Option<Tele>,
     pub theory: TheoryStx,
     pub body: ModelStx,
 }
 
 impl ModelSq {
-    pub fn new(args: Tele, theory: TheoryStx, body: ModelStx) -> Self {
+    pub fn new(args: Option<Tele>, theory: TheoryStx, body: ModelStx) -> Self {
         Self { args, theory, body }
     }
 }
 
 pub struct TheorySq {
-    pub args: Tele,
+    pub args: Option<Tele>,
     pub body: Tele,
 }
 
 impl TheorySq {
-    pub fn new(args: Tele, body: Tele) -> Self {
+    pub fn new(args: Option<Tele>, body: Tele) -> Self {
         Self { args, body }
     }
 }

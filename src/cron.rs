@@ -1,4 +1,4 @@
-use egg::{Analysis, EGraph, Id};
+use egg::{Analysis, EGraph};
 use std::collections::HashMap;
 use std::rc::Rc;
 

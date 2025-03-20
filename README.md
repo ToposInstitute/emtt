@@ -36,7 +36,7 @@ Check out [examples](./examples) to see how it's used.
 
 # TODO
 
-1. Pretty printing, including graphviz output for the e-graph
-2. Allow top-level theories/models to not have brackets
-3. Allow record types to have additional defined members
-4. Allow opening a record
+1. [-] Pretty printing, including graphviz output for the e-graph
+2. [X] Allow top-level theories/models to not have brackets
+3. [ ] Allow record types to have additional defined members
+4. [ ] Allow opening a record
