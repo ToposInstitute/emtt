@@ -48,3 +48,18 @@ fn main() {
         )
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::batch;
+    use std::fs;
+
+    #[test]
+    fn examples() {
+        let examples_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/examples");
+        for file in fs::read_dir(examples_dir).unwrap() {
+            let input = fs::read_to_string(file.unwrap().path()).unwrap();
+            batch::check(&input).unwrap();
+        }
+    }
+}

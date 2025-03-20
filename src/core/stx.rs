@@ -75,7 +75,9 @@ impl Pi {
 
 #[derive(Debug)]
 pub struct Lam {
-    pub tp: Rc<Pi>, // we keep around the type because we need it for eta-expansion of the result
+    // we keep around the type because we might need it for eta-expansion of the result?
+    // TODO: figure out if this is true
+    pub tp: Rc<Pi>,
     pub body: ModelStx,
 }
 

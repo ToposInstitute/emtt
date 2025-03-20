@@ -11,32 +11,39 @@ pub enum Neutral {
     App(Rc<Neutral>, Vec<Elt>),
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FlattenedNeutral {
+    Var(Lvl),
+    Proj(Rc<FlattenedNeutral>, Field),
+    App(Rc<FlattenedNeutral>, Vec<FlattenedElt>),
+}
+
 impl Neutral {
-    pub fn flatten_into(&self, out: &mut Vec<Id>) -> Self {
+    pub fn flatten_into(&self, out: &mut Vec<Id>) -> FlattenedNeutral {
         use Neutral::*;
         match self {
-            Var(l) => Var(*l),
-            Proj(n, f) => Proj(Rc::new(n.flatten_into(out)), *f),
+            Var(l) => FlattenedNeutral::Var(*l),
+            Proj(n, f) => FlattenedNeutral::Proj(Rc::new(n.flatten_into(out)), *f),
             App(head, args) => {
                 let head = head.flatten_into(out);
                 let args = args.iter().map(|arg| arg.flatten_into(out)).collect();
-                App(Rc::new(head), args)
+                FlattenedNeutral::App(Rc::new(head), args)
             }
         }
     }
 
-    pub fn unflatten(&self, from: &[Id]) -> Self {
-        use Neutral::*;
-        match self {
-            Var(l) => Var(*l),
-            Proj(n, f) => Proj(Rc::new(n.unflatten(from)), *f),
-            App(head, args) => {
-                let head = head.unflatten(from);
-                let args = args.iter().map(|arg| arg.unflatten(from)).collect();
-                App(Rc::new(head), args)
-            }
-        }
-    }
+    // pub fn unflatten(&self, from: &[Id]) -> Self {
+    //     use Neutral::*;
+    //     match self {
+    //         Var(l) => Var(*l),
+    //         Proj(n, f) => Proj(Rc::new(n.unflatten(from)), *f),
+    //         App(head, args) => {
+    //             let head = head.unflatten(from);
+    //             let args = args.iter().map(|arg| arg.unflatten(from)).collect();
+    //             App(Rc::new(head), args)
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Clone, Debug)]

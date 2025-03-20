@@ -5,20 +5,29 @@ use std::rc::Rc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Elt {
-    // used when element show up in the head of an egraph node, refers to one of
-    // the arguments of the e-graph node. Otherwise should not appear.
-    Lvl(usize),
     Id(Id),
     Erased,
     Cons(Rc<Vec<Elt>>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FlattenedElt {
+    Lvl(usize),
+    Erased,
+    Cons(Rc<Vec<FlattenedElt>>),
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Neutral {
     Var(Lvl),
     Proj([Id; 1], Field),
-    ModelProj(Rc<model::Neutral>, Field, Rc<Type>, Vec<Id>),
-    App(Rc<model::Neutral>, Rc<Vec<Elt>>, Rc<Type>, Vec<Id>),
+    ModelProj(Rc<model::FlattenedNeutral>, Field, Rc<Type>, Vec<Id>),
+    App(
+        Rc<model::FlattenedNeutral>,
+        Rc<Vec<FlattenedElt>>,
+        Rc<Type>,
+        Vec<Id>,
+    ),
 }
 
 impl fmt::Display for Neutral {
@@ -36,36 +45,35 @@ impl fmt::Display for Neutral {
 pub enum Discriminant {
     Var(Lvl),
     Proj(Field),
-    App(Rc<model::Neutral>),
-    ModelProj(Rc<model::Neutral>, Field),
+    App(Rc<model::FlattenedNeutral>),
+    ModelProj(Rc<model::FlattenedNeutral>, Field),
 }
 
 impl Elt {
-    pub fn flatten_into(&self, out: &mut Vec<Id>) -> Elt {
+    pub fn flatten_into(&self, out: &mut Vec<Id>) -> FlattenedElt {
         match self {
-            Elt::Lvl(_) => panic!("expected a regular element"),
             Elt::Id(i) => {
                 let j = out.len();
                 out.push(*i);
-                Elt::Lvl(j)
+                FlattenedElt::Lvl(j)
             }
-            Elt::Erased => Elt::Erased,
-            Elt::Cons(fields) => Elt::Cons(Rc::new(
+            Elt::Erased => FlattenedElt::Erased,
+            Elt::Cons(fields) => FlattenedElt::Cons(Rc::new(
                 fields.iter().map(|field| field.flatten_into(out)).collect(),
             )),
         }
     }
 
-    pub fn unflatten(&self, from: &[Id]) -> Elt {
-        match self {
-            Elt::Lvl(i) => Elt::Id(from[*i]),
-            Elt::Id(_) => panic!("expected a flattened element"),
-            Elt::Erased => Elt::Erased,
-            Elt::Cons(fields) => Elt::Cons(Rc::new(
-                fields.iter().map(|field| field.unflatten(from)).collect(),
-            )),
-        }
-    }
+    // pub fn unflatten(&self, from: &[Id]) -> Elt {
+    //     match self {
+    //         Elt::Lvl(i) => Elt::Id(from[*i]),
+    //         Elt::Id(_) => panic!("expected a flattened element"),
+    //         Elt::Erased => Elt::Erased,
+    //         Elt::Cons(fields) => Elt::Cons(Rc::new(
+    //             fields.iter().map(|field| field.unflatten(from)).collect(),
+    //         )),
+    //     }
+    // }
 }
 
 impl Language for Neutral {
