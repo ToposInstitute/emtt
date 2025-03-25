@@ -3,6 +3,7 @@ mod core;
 mod cron;
 mod ctx;
 mod elab;
+mod elab2;
 mod env;
 mod eval;
 mod pprint;
