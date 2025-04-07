@@ -48,7 +48,10 @@ impl<'a> Ctx<'a> {
 
     pub fn dump(&mut self, outfile: &str) {
         self.evaluator_mut().cron.rebuild();
-        self.evaluator_mut().cron.dot().to_svg(outfile).unwrap();
+        match self.evaluator_mut().cron.dot().to_svg(outfile) {
+            Ok(_) => {}
+            Err(e) => eprintln!("couldn't run graphviz: {}", e),
+        }
     }
 
     pub fn checkpoint(&self) -> Checkpoint<'a> {
