@@ -2,7 +2,7 @@
 
 This is a type theory for Lex^op, the opposite of the category of finite limit
 theories. The accompanying paper draft may be found at
-https://forest.topos.site/public/foreign-topos-ocl-006Y.xml. The basic
+https://forest.topos.site/public/ocl-006Y. The basic
 judgements of this type theory are the following.
 
 We write a morphism in Lex^op from `C` to `D` as `C <-- D`, as it corresponds to
